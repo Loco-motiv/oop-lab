@@ -1,1 +1,2 @@
-First lab for OOP
+#Варианты
+1) 2
