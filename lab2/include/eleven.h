@@ -13,6 +13,8 @@ public:
    Eleven(const Eleven& other);
    Eleven(Eleven&& other) noexcept;
    
+   Eleven& operator =(const Eleven& other);
+   Eleven& operator = (Eleven&& other);
    Eleven operator +(const Eleven& other);
    Eleven operator -(const Eleven& other);
    bool operator ==(const Eleven& other) const;

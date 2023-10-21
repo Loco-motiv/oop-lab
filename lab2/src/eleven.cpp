@@ -58,6 +58,24 @@ Eleven::Eleven(Eleven &&other) noexcept
     other._array = nullptr;
 }
 
+Eleven& Eleven::operator =(const Eleven& other){
+    _size  = other._size;
+    _array = new unsigned char[_size];
+
+    for(size_t i{0};i<_size;++i) _array[i] = other._array[i];
+    return *this;
+}
+
+Eleven& Eleven::operator =(Eleven&& other){
+    _size = other._size;
+    _array = other._array;
+
+    other._size = 0;
+    other._array = nullptr;
+
+    return *this;
+}
+
 Eleven Eleven::operator +(const Eleven &other)
 {
     size_t newSize = std::max(this->_size, other._size);
@@ -94,11 +112,12 @@ Eleven Eleven::operator +(const Eleven &other)
             tempArray[i] = array1[i];
         }
         tempArray[newSize-1] = inttochar(remainder);
+        delete[] array1;
         array1 = tempArray;
-        delete[] tempArray;
     }
     delete[] array2;
     Eleven ans(array1, newSize);
+    delete[] array1;
     return ans;   
 }
 
@@ -165,23 +184,7 @@ bool Eleven::operator >(const Eleven &other) const
 
 bool Eleven::operator <(const Eleven &other) const
 {
-    if (_size < other._size){
-        return true;
-    }
-    else if (_size > other._size){
-        return false;
-    }
-    else {
-        for (size_t i = other._size - 1; i >= 0; i--){
-            if (chartoint(_array[i]) > chartoint(other._array[i])){
-                return false;
-            }
-            else if (chartoint(_array[i]) < chartoint(other._array[i])){
-                return true;
-            }
-        }
-        return false;
-    }
+    return other > *this;
 }
 
 std::ostream& operator <<(std::ostream &os, const Eleven& other)
