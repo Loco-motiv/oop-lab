@@ -23,11 +23,6 @@ public:
         for (int i = 0; i < _size; ++i){
             total += _array[i]->operator double();
         }
-        // for (const auto& figure: _array) {
-        //     if (figure) {
-        //         total += figure->area();
-        //     }
-        // }
         return total;
     }
 
