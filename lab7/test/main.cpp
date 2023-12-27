@@ -30,10 +30,12 @@ public:
     {
         if (win)
         {
-            std::cout << std::endl
-                      << "Murder --------" << std::endl;
+            std::cout << "Murder --------" << std::endl;
+            std::cout << "killer: ";
             attacker->print();
+            std::cout << "victim: ";
             defender->print();
+            std::cout << std::endl;
         }
     }
 };
@@ -47,13 +49,16 @@ std::shared_ptr<NPC> factory(std::istream &is)
         switch (type)
         {
         case DragonType:
-            result = std::make_shared<Dragon>(is);
+            result = std::static_pointer_cast<NPC>(std::make_shared<Dragon>(is));
+            //result = std::make_shared<Dragon>(is);
             break;
         case ElfType:
-            result = std::make_shared<Elf>(is);
+            result = std::static_pointer_cast<NPC>(std::make_shared<Elf>(is));
+            //result = std::make_shared<Elf>(is);
             break;
         case Knight_ErrantType:
-            result = std::make_shared<Knight_Errant>(is);
+            result = std::static_pointer_cast<NPC>(std::make_shared<Knight_Errant>(is));
+            //result = std::make_shared<Knight_Errant>(is);
             break;
         }
     }
@@ -72,13 +77,13 @@ std::shared_ptr<NPC> factory(NpcType type, int x, int y)
     switch (type)
     {
     case DragonType:
-        result = std::make_shared<Dragon>(x, y);
+        result = std::static_pointer_cast<NPC>(std::make_shared<Dragon>(x, y));
         break;
     case ElfType:
-        result = std::make_shared<Elf>(x, y);
+        result = std::static_pointer_cast<NPC>(std::make_shared<Elf>(x, y));
         break;
     case Knight_ErrantType:
-        result = std::make_shared<Knight_Errant>(x, y);
+        result = std::static_pointer_cast<NPC>(std::make_shared<Knight_Errant>(x, y));
         break;
     default:
         break;
@@ -124,21 +129,21 @@ std::ostream &operator<<(std::ostream &os, const set_t &array)
     return os;
 }
 
-set_t fight(const set_t &array, size_t distance)
-{
-    set_t dead_list;
+// set_t fight(const set_t &array, size_t distance)
+// {
+//     set_t dead_list;
 
-    for (const auto &attacker : array)
-        for (const auto &defender : array)
-            if ((attacker != defender) && (attacker->is_close(defender, distance)))
-            {
-                bool success = defender->accept(attacker);
-                if (success)
-                    dead_list.insert(defender);
-            }
+//     for (const auto &attacker : array)
+//         for (const auto &defender : array)
+//             if ((attacker != defender) && (attacker->is_close(defender, distance)))
+//             {
+//                 bool success = defender->accept(attacker);
+//                 if (success)
+//                     dead_list.insert(defender);
+//             }
 
-    return dead_list;
-}
+//     return dead_list;
+// }
 
 struct print : std::stringstream
 {
@@ -178,49 +183,45 @@ public:
         events.push(event);
     }
 
-    void operator()()
-    {
-        while (true)
-        {
+    void operator()(void* args) {
+        auto time = (std::chrono::seconds*) args;
+        auto start = std::chrono::steady_clock::now();
+        while (true) {
+            std::optional<FightEvent> event;
             {
-                std::optional<FightEvent> event;
-
-                {
-                    std::lock_guard<std::shared_mutex> lock(mtx);
-                    if (!events.empty())
-                    {
-                        event = events.back();
-                        events.pop();
-                    }
+                std::lock_guard<std::shared_mutex> lock(mtx);
+                if (!events.empty()) {
+                    event = events.back();
+                    events.pop();
+                }
+            }
+            if (event) {
+                if (
+                    event->attacker->is_alive() &&
+                    event->defender->is_alive() && 
+                    event->defender->accept(event->attacker) &&
+                    (event->attacker->throw_dice() > event->defender->throw_dice())
+                ) {
+                    event->defender->must_die();
                 }
 
-                if (event)
-                {
-                    try
-                    {
-                        if (event->attacker->is_alive())
-                            if (event->defender->is_alive())
-                                if (event->defender->accept(event->attacker))
-                                    event->defender->must_die();
-                    }
-                    catch (...)
-                    {
-                        std::lock_guard<std::shared_mutex> lock(mtx);
-                        events.push(*event);
-                    }
-                }
-                else
-                    std::this_thread::sleep_for(100ms);
+            } else {
+                std::this_thread::sleep_for(100ms);
+            }
+            auto end = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(end - start) >= *time) {
+                break;
             }
         }
     }
+
 };
 
 int main()
 {
     set_t array;
-    std::mutex mtx;
-    std::atomic<bool> gameOver(false);
+    const std::chrono::seconds time = 30s;
+
     const int MAX_X{100};
     const int MAX_Y{100};
     const int DISTANCE_KILL_DRAGON{30};
@@ -238,10 +239,13 @@ int main()
     std::cout << "Starting list:" << std::endl
               << array;
 
-    std::thread fight_thread(std::ref(FightManager::get()));
+    std::thread fight_thread(std::ref(FightManager::get()), (void*) &time);
 
-    std::thread move_thread([&array, MAX_X, MAX_Y]()
+    std::mutex npcMutex;
+
+    std::thread move_thread([&array, MAX_X, MAX_Y, time]()
                             {
+            auto start = std::chrono::steady_clock::now();
             while (true)
             {
                 // move phase
@@ -266,6 +270,8 @@ int main()
                             default:
                                 break;
                             }
+                            shift_x = std::rand() % (shift_x * 2) - shift_x;
+                            shift_y = std::rand() % (shift_y * 2) - shift_y;
                             npc->move(shift_x, shift_y, MAX_X, MAX_Y);
                         }
                 }
@@ -298,40 +304,43 @@ int main()
                                     }
                                 }
                             }
-                            std::this_thread::sleep_for(1s);
+                            std::this_thread::sleep_for(50ms);
+                            auto end = std::chrono::steady_clock::now();
+                            if (std::chrono::duration_cast<std::chrono::seconds>(end - start) >= time) {
+                                break;
+                            }
             } });
+    auto start = std::chrono::steady_clock::now();
     while (true)
     {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        std::lock_guard<std::mutex> lock(mtx);
         const int grid{20}, step_x{MAX_X / grid}, step_y{MAX_Y / grid};
         {
-            std::array<char, grid * grid> fields{0};
+            std::array<std::array<char, grid>, grid> fields{std::array<char, grid>{0}};
             for (std::shared_ptr<NPC> npc : array)
             {
                 auto [x, y] = npc->position();
                 int i = x / step_x;
                 int j = y / step_y;
+                if (i >= grid) i = grid - 1;
+                if (j >= grid) j = grid - 1;
 
                 if (npc->is_alive())
                 {
                     switch (npc->get_type())
                     {
                     case DragonType:
-                        fields[i + grid * j] = 'D';
+                        fields[i][j] = 'D';
                         break;
                     case Knight_ErrantType:
-                        fields[i + grid * j] = 'K';
+                        fields[i][j] = 'K';
                         break;
                     case ElfType:
-                        fields[i + grid * j] = 'E';
+                        fields[i][j] = 'E';
                         break;
                     default:
                         break;
                     }
                 }
-                else
-                    fields[i + grid * j] = '.';
             }
 
             std::lock_guard<std::mutex> lck(print_mutex);
@@ -339,7 +348,7 @@ int main()
             {
                 for (int i = 0; i < grid; ++i)
                 {
-                    char c = fields[i + j * grid];
+                    char c = fields[i][j];
                     if (c != 0)
                         std::cout << "[" << c << "]";
                     else
@@ -350,23 +359,17 @@ int main()
             std::cout << std::endl;
         }
         std::this_thread::sleep_for(1s);
-    };
-
-    std::thread gameTimer([&array]()
-                          {
-        std::this_thread::sleep_for(std::chrono::seconds(30));
-        std::cout << "Игра завершена! Список выживших NPC:" << std::endl;
-        for (std::shared_ptr<NPC> npc : array) {
-            if (npc->is_alive()) {
-                auto [x, y] = npc->position();
-                std::cout << "NPC на позиции " << x << "," << y << " остался жив." << std::endl;
-            }
+        auto end = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::seconds>(end - start) >= time) {
+            break;
         }
-        std::exit(0); });
+    }
 
     move_thread.join();
     fight_thread.join();
-    gameTimer.join();
 
+    std::cout << "Survivors: " << std::endl;
+    for (auto &n : array)
+                if (n->is_alive())  n->print();
     return 0;
 }

@@ -33,7 +33,7 @@ struct NPC : public std::enable_shared_from_this<NPC>
 {
 
 private:
-    std::mutex mtx;
+    mutable std::mutex mtx;
 
     NpcType type;
     int x{0};
@@ -46,7 +46,7 @@ public:
     NPC(NpcType t, int _x, int _y);
     NPC(NpcType t, std::istream &is);
 
-    void subscribe(std::shared_ptr<IFightObserver>observer );
+    void subscribe(const std::shared_ptr<IFightObserver>& observer );
     void fight_notify(const std::shared_ptr<NPC> defender,bool win);
     virtual bool is_close(const std::shared_ptr<NPC> &other, size_t distance) const;
 
@@ -68,4 +68,5 @@ public:
 
     bool is_alive();
     void must_die();
+    int throw_dice() const noexcept;
 };

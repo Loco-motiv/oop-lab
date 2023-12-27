@@ -7,19 +7,25 @@ NPC::NPC(NpcType t, std::istream &is) : type(t)
     is >> y;
 }
 
-void NPC::subscribe(std::shared_ptr<IFightObserver> observer)
+void NPC::subscribe(const std::shared_ptr<IFightObserver>& observer)
 {
-   observers.push_back(observer);
+   if (std::find(observers.begin(), observers.end(), observer) == observers.end()) {
+            observers.push_back(observer);
+        }
 }
+
 
 void NPC::fight_notify(const std::shared_ptr<NPC> defender, bool win)
 {
     for (auto &o : observers)
-        o->on_fight(shared_from_this(), defender, win);
+        o->on_fight(std::const_pointer_cast<NPC>(shared_from_this()), defender, win);
 }
 
 bool NPC::is_close(const std::shared_ptr<NPC> &other, size_t distance) const
 {
+    auto [other_x, other_y] = other->position();
+    std::lock_guard<std::mutex> lck(mtx);
+
     if (std::pow(x - other->x, 2) + std::pow(y - other->y, 2) <= std::pow(distance, 2))
         return true;
     else
@@ -70,4 +76,8 @@ void NPC::must_die()
 {
     std::lock_guard<std::mutex> lck(mtx);
     alive = false;
+}
+
+int NPC::throw_dice() const noexcept {
+    return std::rand() % 6 + 1;
 }
